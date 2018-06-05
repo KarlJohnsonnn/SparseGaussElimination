@@ -15,6 +15,7 @@ PROGRAM Main_SparseGaussElimmination
   ! matricies for symbolic phase
   TYPE(CSR_Matrix_T)     :: Miter, LU_Miter  ! compressed row
   TYPE(SpRowColD_T)      :: temp_LU_Dec           ! sparse-LU matrix format
+  REAL(dp), ALLOCATABLE  :: rhs(:)
 
   INTEGER,  ALLOCATABLE  :: LU_Perm(:)
 
@@ -23,7 +24,7 @@ PROGRAM Main_SparseGaussElimmination
   INTEGER, ALLOCATABLE :: PivOrder(:)
 
   ! Timer variables
-  REAL(dp) :: StartTimer, TimeSymbolic
+  REAL(dp) :: StartTimer, TimeSymbolic, TimeNumeric, TimeSolve
 
   INTEGER :: i
 
@@ -94,10 +95,24 @@ PROGRAM Main_SparseGaussElimmination
   !----------------------------------------------------------------
   CALL CPU_TIME(TimeSymbolic)
   
-  TimeSymbolic = TimeSymbolic - StartTimer   ! stop timer for symbolic matrix calculations
   WRITE(*,*)
-  WRITE(*,'(10X,A,1X,F10.4,A)') 'Time symbolic factorization = ', TimeSymbolic, ' [sec]'
+  WRITE(*,'(10X,A,1X,F12.8,A)') 'Time symbolic factorization = ', TimeSymbolic - StartTimer, ' [sec]'
 
+
+  ALLOCATE(rhs(LU_Miter%m))
+
+  CALL RANDOM_NUMBER( LU_Miter%Val )
+  CALL RANDOM_NUMBER( rhs )
+
+  CALL CPU_TIME(StartTimer) 
+  CALL SparseLU( LU_Miter )
+  CALL CPU_TIME(TimeNumeric)
+  WRITE(*,'(10X,A,1X,F12.8,A)') 'Time numeric factorization = ', TimeNumeric-StartTimer, ' [sec]'
+
+  CALL CPU_TIME(StartTimer) 
+  CALL SolveSparse( LU_Miter , rhs )
+  CALL CPU_TIME(TimeSolve)
+  WRITE(*,'(10X,A,1X,F12.8,A)') 'Time solving triangula systems = ', TimeSolve-StartTimer, ' [sec]'
   
 
   !================================================================
