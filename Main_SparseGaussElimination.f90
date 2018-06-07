@@ -1,5 +1,10 @@
-
-
+!===================================================================================
+! This is a test program for the solution of a sparse linear equation system
+!
+! Author: Willi Schimmel
+! Institut: Leibniz Institute for tropospheric research (TROPOS) 
+! Date: 7.June 2018
+!===================================================================================
 
 PROGRAM Main_SparseGaussElimmination
   !
@@ -20,7 +25,6 @@ PROGRAM Main_SparseGaussElimmination
   INTEGER,  ALLOCATABLE  :: LU_Perm(:)
 
   ! permutation vector/ pivot order for LU-decomp
-  INTEGER, ALLOCATABLE :: InvPermu(:)
   INTEGER, ALLOCATABLE :: PivOrder(:)
 
   ! Timer variables
@@ -32,16 +36,14 @@ PROGRAM Main_SparseGaussElimmination
   INTEGER        :: io_stat
 
 
-
-
   !----------------------------------------------------------------
   ! --- Read run control parameters (which runfile)
   CALL getarg( 1 , FileName0 )             
   IF ( FileName0 == '' ) THEN
-    WRITE(*,777,ADVANCE='NO') 'Input RUNFilename: '; READ(*,*)   FileName0
+    WRITE(*,777,ADVANCE='NO') 'Input RUNFilename: '
+    READ(*,*,IOSTAT=io_stat,IOMSG=io_msg)   FileName0
   END IF
   FileName0 = TRIM(ADJUSTL(FileName0))
-
   
   Miter = ReadSparseMatrix(FileName0)
 
@@ -99,16 +101,24 @@ PROGRAM Main_SparseGaussElimmination
   WRITE(*,'(10X,A,1X,F12.8,A)') 'Time symbolic factorization = ', TimeSymbolic - StartTimer, ' [sec]'
 
 
-  ALLOCATE(rhs(LU_Miter%m))
+  !----------------------------------------------------------------
+  ! --- Update values in matrix
+  !LU_Miter%Val = 0.0_dp
+  !LU_Miter%Val( LU_Perm ) = A%Val
 
+  ALLOCATE(rhs(LU_Miter%m))
   CALL RANDOM_NUMBER( LU_Miter%Val )
   CALL RANDOM_NUMBER( rhs )
 
+  !----------------------------------------------------------------
+  ! --- Numerical factorization
   CALL CPU_TIME(StartTimer) 
   CALL SparseLU( LU_Miter )
   CALL CPU_TIME(TimeNumeric)
   WRITE(*,'(10X,A,1X,F12.8,A)') 'Time numeric factorization = ', TimeNumeric-StartTimer, ' [sec]'
 
+  !----------------------------------------------------------------
+  ! --- Solving the triangular systems
   CALL CPU_TIME(StartTimer) 
   CALL SolveSparse( LU_Miter , rhs )
   CALL CPU_TIME(TimeSolve)
