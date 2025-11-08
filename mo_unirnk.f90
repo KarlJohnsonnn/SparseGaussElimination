@@ -1,790 +1,606 @@
-MODULE mo_unirnk
-INTEGER, PARAMETER :: kdp = SELECTed_REAL_KIND(15)
-PUBLIC :: unirnk
-PRIVATE :: kdp
-PRIVATE :: R_unirnk, I_unirnk, D_unirnk
-PRIVATE :: R_nearless, I_nearless, D_nearless, nearless
-INTERFACE unirnk
-  MODULE PROCEDURE D_unirnk, R_unirnk, I_unirnk
-END INTERFACE unirnk
-INTERFACE nearless
-  MODULE PROCEDURE D_nearless, R_nearless, I_nearless
-END INTERFACE nearless
+!===============================================================================
+! Module: mo_unirnk
+! 
+! Purpose: Merge-sort ranking of an array with removal of duplicate entries
+!
+! Description:
+!   The routine is similar to pure merge-sort ranking, but on the last pass,
+!   it discards indices that correspond to duplicate entries. For performance
+!   reasons, the first 2 passes are taken out of the standard loop and use
+!   dedicated coding.
+!
+! Public Interface:
+!   unirnk - Generic interface for ranking arrays (double, real, integer)
+!===============================================================================
+module mo_unirnk
+
+  implicit none
+  
+  integer, parameter :: kdp = selected_real_kind(15)
+  
+  public :: unirnk
+  private :: kdp
+  private :: r_unirnk, i_unirnk, d_unirnk
+  private :: r_nearless, i_nearless, d_nearless, nearless
+  
+  interface unirnk
+    module procedure d_unirnk, r_unirnk, i_unirnk
+  end interface unirnk
+  
+  interface nearless
+    module procedure d_nearless, r_nearless, i_nearless
+  end interface nearless
 
 contains
 
-SUBROUTINE D_unirnk (XVALT, IRNGT, NUNI)
-! __________________________________________________________
-!   UNIRNK = Merge-sort ranking of an array, with removal of
-!   duplicate entries.
-!   The routine is similar to pure merge-sort ranking, but on
-!   the last pass, it discards indices that correspond to
-!   duplicate entries.
-!   For performance reasons, the first 2 passes are taken
-!   out of the standard loop, and use dedicated coding.
-! __________________________________________________________
-! __________________________________________________________
-      REAL (KIND=8), DIMENSION (:), INTENT (In) :: XVALT  ! zu sortierENDer Vektor
-      INTEGER, DIMENSION (:), INTENT (Out) :: IRNGT         ! Permutationsvektor
-      INTEGER, INTENT (Out) :: NUNI                         ! laenge des sortierten Vektor
-! __________________________________________________________
-      INTEGER, DIMENSION (SIZE(IRNGT)) :: JWRKT
-      INTEGER :: LMTNA, LMTNC, IRNG, IRNG1, IRNG2
-      INTEGER :: NVAL, IIND, IWRKD, IWRK, IWRKF, JINDA, IINDA, IINDB
-      REAL (KIND=8) :: XTST, XVALA, XVALB
-!
-!
-      NVAL = Min (SIZE(XVALT), SIZE(IRNGT))
-      NUNI = NVAL
-!
-      SELECT CASE (NVAL)
-      CASE (:0)
-         RETURN
-      CASE (1)
-         IRNGT (1) = 1
-         RETURN
-      CASE DEFAULT
-         CONTINUE
-      END SELECT
-!
-!  Fill-in the index array, creating ordered couples
-!
-      DO IIND = 2, NVAL, 2
-         IF (XVALT(IIND-1) < XVALT(IIND)) THEN
-            IRNGT (IIND-1) = IIND - 1
-            IRNGT (IIND) = IIND
-         ELSE
-            IRNGT (IIND-1) = IIND
-            IRNGT (IIND) = IIND - 1
-         END IF
-      END DO
-      IF (MODULO(NVAL, 2) /= 0) THEN
-         IRNGT (NVAL) = NVAL
-      END IF
-!
-!  We will now have ordered subsets A - B - A - B - ...
-!  and merge A and B couples into     C   -   C   - ...
-!
-      LMTNA = 2
-      LMTNC = 4
-!
-!  First iteration. The length of the ordered subsets goes from 2 to 4
-!
-      DO
-         IF (NVAL <= 4) EXIT
-!
-!   Loop on merges of A and B into C
-!
-         DO IWRKD = 0, NVAL - 1, 4
-            IF ((IWRKD+4) > NVAL) THEN
-               IF ((IWRKD+2) >= NVAL) EXIT
-!
-!   1 2 3
-!
-               IF (XVALT(IRNGT(IWRKD+2)) <= XVALT(IRNGT(IWRKD+3))) EXIT
-!
-!   1 3 2
-!
-               IF (XVALT(IRNGT(IWRKD+1)) <= XVALT(IRNGT(IWRKD+3))) THEN
-                  IRNG2 = IRNGT (IWRKD+2)
-                  IRNGT (IWRKD+2) = IRNGT (IWRKD+3)
-                  IRNGT (IWRKD+3) = IRNG2
-!
-!   3 1 2
-!
-               ELSE
-                  IRNG1 = IRNGT (IWRKD+1)
-                  IRNGT (IWRKD+1) = IRNGT (IWRKD+3)
-                  IRNGT (IWRKD+3) = IRNGT (IWRKD+2)
-                  IRNGT (IWRKD+2) = IRNG1
-               END IF
-               EXIT
-            END IF
-!
-!   1 2 3 4
-!
-            IF (XVALT(IRNGT(IWRKD+2)) <= XVALT(IRNGT(IWRKD+3))) CYCLE
-!
-!   1 3 x x
-!
-            IF (XVALT(IRNGT(IWRKD+1)) <= XVALT(IRNGT(IWRKD+3))) THEN
-               IRNG2 = IRNGT (IWRKD+2)
-               IRNGT (IWRKD+2) = IRNGT (IWRKD+3)
-               IF (XVALT(IRNG2) <= XVALT(IRNGT(IWRKD+4))) THEN
-!   1 3 2 4
-                  IRNGT (IWRKD+3) = IRNG2
-               ELSE
-!   1 3 4 2
-                  IRNGT (IWRKD+3) = IRNGT (IWRKD+4)
-                  IRNGT (IWRKD+4) = IRNG2
-               END IF
-!
-!   3 x x x
-!
-            ELSE
-               IRNG1 = IRNGT (IWRKD+1)
-               IRNG2 = IRNGT (IWRKD+2)
-               IRNGT (IWRKD+1) = IRNGT (IWRKD+3)
-               IF (XVALT(IRNG1) <= XVALT(IRNGT(IWRKD+4))) THEN
-                  IRNGT (IWRKD+2) = IRNG1
-                  IF (XVALT(IRNG2) <= XVALT(IRNGT(IWRKD+4))) THEN
-!   3 1 2 4
-                     IRNGT (IWRKD+3) = IRNG2
-                  ELSE
-!   3 1 4 2
-                     IRNGT (IWRKD+3) = IRNGT (IWRKD+4)
-                     IRNGT (IWRKD+4) = IRNG2
-                  END IF
-               ELSE
-!   3 4 1 2
-                  IRNGT (IWRKD+2) = IRNGT (IWRKD+4)
-                  IRNGT (IWRKD+3) = IRNG1
-                  IRNGT (IWRKD+4) = IRNG2
-               END IF
-            END IF
-         END DO
-!
-!  The Cs become As and Bs
-!
-         LMTNA = 4
-         EXIT
-      END DO
-!
-!  Iteration loop. Each time, the length of the ordered subsets
-!  is DOubled.
-!
-      DO
-         IF (2*LMTNA >= NVAL) EXIT
-         IWRKF = 0
-         LMTNC = 2 * LMTNC
-!
-!   Loop on merges of A and B into C
-!
-         DO
-            IWRK = IWRKF
-            IWRKD = IWRKF + 1
-            JINDA = IWRKF + LMTNA
-            IWRKF = IWRKF + LMTNC
-            IF (IWRKF >= NVAL) THEN
-               IF (JINDA >= NVAL) EXIT
-               IWRKF = NVAL
-            END IF
-            IINDA = 1
-            IINDB = JINDA + 1
-!
-!  One steps in the C subset, that we create in the final rank array
-!
-!  Make a copy of the rank array for the iteration
-!
-            JWRKT (1:LMTNA) = IRNGT (IWRKD:JINDA)
-            XVALA = XVALT (JWRKT(IINDA))
-            XVALB = XVALT (IRNGT(IINDB))
-!
-            DO
-               IWRK = IWRK + 1
-!
-!  We still have unprocessed values in both A and B
-!
-               IF (XVALA > XVALB) THEN
-                  IRNGT (IWRK) = IRNGT (IINDB)
-                  IINDB = IINDB + 1
-                  IF (IINDB > IWRKF) THEN
-!  Only A still with unprocessed values
-                     IRNGT (IWRK+1:IWRKF) = JWRKT (IINDA:LMTNA)
-                     EXIT
-                  END IF
-                  XVALB = XVALT (IRNGT(IINDB))
-               ELSE
-                  IRNGT (IWRK) = JWRKT (IINDA)
-                  IINDA = IINDA + 1
-                  IF (IINDA > LMTNA) EXIT! Only B still with unprocessed values
-                  XVALA = XVALT (JWRKT(IINDA))
-               END IF
-!
-            END DO
-         END DO
-!
-!  The Cs become As and Bs
-!
-         LMTNA = 2 * LMTNA
-      END DO
-!
-!   Last merge of A and B into C, with removal of duplicates.
-!
-      IINDA = 1
-      IINDB = LMTNA + 1
-      NUNI = 0
-!
-!  One steps in the C subset, that we create in the final rank array
-!
-      JWRKT (1:LMTNA) = IRNGT (1:LMTNA)
-      IF (IINDB <= NVAL) THEN
-        XTST = NEARLESS (Min(XVALT(JWRKT(1)), XVALT(IRNGT(IINDB))))
-      ELSE
-        XTST = NEARLESS (XVALT(JWRKT(1)))
-      ENDIF
-      DO IWRK = 1, NVAL
-!
-!  We still have unprocessed values in both A and B
-!
-         IF (IINDA <= LMTNA) THEN
-            IF (IINDB <= NVAL) THEN
-               IF (XVALT(JWRKT(IINDA)) > XVALT(IRNGT(IINDB))) THEN
-                  IRNG = IRNGT (IINDB)
-                  IINDB = IINDB + 1
-               ELSE
-                  IRNG = JWRKT (IINDA)
-                  IINDA = IINDA + 1
-               END IF
-            ELSE
-!
-!  Only A still with unprocessed values
-!
-               IRNG = JWRKT (IINDA)
-               IINDA = IINDA + 1
-            END IF
-         ELSE
-!
-!  Only B still with unprocessed values
-!
-            IRNG = IRNGT (IWRK)
-         END IF
-         IF (XVALT(IRNG) > XTST) THEN
-            XTST = XVALT (IRNG)
-            NUNI = NUNI + 1
-            IRNGT (NUNI) = IRNG
-         END IF
-!
-      END DO
-!
-      RETURN
-!
-END SUBROUTINE D_unirnk
+subroutine d_unirnk(xvalt, irngt, nuni)
+  ! Merge-sort ranking for double precision arrays with duplicate removal
+  !
+  ! Arguments:
+  !   xvalt - input array to be ranked
+  !   irngt - output permutation vector (rank indices)
+  !   nuni  - output number of unique elements
+  
+  real(kind=8), dimension(:), intent(in) :: xvalt
+  integer, dimension(:), intent(out) :: irngt
+  integer, intent(out) :: nuni
+  
+  integer, dimension(size(irngt)) :: jwrkt
+  integer :: lmtna, lmtnc, irng, irng1, irng2
+  integer :: nval, iind, iwrkd, iwrk, iwrkf, jinda, iinda, iindb
+  real(kind=8) :: xtst, xvala, xvalb
 
-SUBROUTINE R_unirnk (XVALT, IRNGT, NUNI)
-! __________________________________________________________
-!   UNIRNK = Merge-sort ranking of an array, with removal of
-!   duplicate entries.
-!   The routine is similar to pure merge-sort ranking, but on
-!   the last pass, it discards indices that correspond to
-!   duplicate entries.
-!   For performance reasons, the first 2 passes are taken
-!   out of the standard loop, and use dedicated coding.
-! __________________________________________________________
-! __________________________________________________________
-      REAL(KIND=4), DIMENSION (:), INTENT (In) :: XVALT
-      INTEGER, DIMENSION (:), INTENT (Out) :: IRNGT
-      INTEGER, INTENT (Out) :: NUNI
-! __________________________________________________________
-      INTEGER, DIMENSION (SIZE(IRNGT)) :: JWRKT
-      INTEGER :: LMTNA, LMTNC, IRNG, IRNG1, IRNG2
-      INTEGER :: NVAL, IIND, IWRKD, IWRK, IWRKF, JINDA, IINDA, IINDB
-      REAL(KIND=4) :: XTST, XVALA, XVALB
-!
-!
-      NVAL = Min (SIZE(XVALT), SIZE(IRNGT))
-      NUNI = NVAL
-!
-      SELECT CASE (NVAL)
-      CASE (:0)
-         RETURN
-      CASE (1)
-         IRNGT (1) = 1
-         RETURN
-      CASE DEFAULT
-         CONTINUE
-      END SELECT
-!
-!  Fill-in the index array, creating ordered couples
-!
-      DO IIND = 2, NVAL, 2
-         IF (XVALT(IIND-1) < XVALT(IIND)) THEN
-            IRNGT (IIND-1) = IIND - 1
-            IRNGT (IIND) = IIND
-         ELSE
-            IRNGT (IIND-1) = IIND
-            IRNGT (IIND) = IIND - 1
-         END IF
-      END DO
-      IF (MODULO(NVAL, 2) /= 0) THEN
-         IRNGT (NVAL) = NVAL
-      END IF
-!
-!  We will now have ordered subsets A - B - A - B - ...
-!  and merge A and B couples into     C   -   C   - ...
-!
-      LMTNA = 2
-      LMTNC = 4
-!
-!  First iteration. The length of the ordered subsets goes from 2 to 4
-!
-      DO
-         IF (NVAL <= 4) EXIT
-!
-!   Loop on merges of A and B into C
-!
-         DO IWRKD = 0, NVAL - 1, 4
-            IF ((IWRKD+4) > NVAL) THEN
-               IF ((IWRKD+2) >= NVAL) EXIT
-!
-!   1 2 3
-!
-               IF (XVALT(IRNGT(IWRKD+2)) <= XVALT(IRNGT(IWRKD+3))) EXIT
-!
-!   1 3 2
-!
-               IF (XVALT(IRNGT(IWRKD+1)) <= XVALT(IRNGT(IWRKD+3))) THEN
-                  IRNG2 = IRNGT (IWRKD+2)
-                  IRNGT (IWRKD+2) = IRNGT (IWRKD+3)
-                  IRNGT (IWRKD+3) = IRNG2
-!
-!   3 1 2
-!
-               ELSE
-                  IRNG1 = IRNGT (IWRKD+1)
-                  IRNGT (IWRKD+1) = IRNGT (IWRKD+3)
-                  IRNGT (IWRKD+3) = IRNGT (IWRKD+2)
-                  IRNGT (IWRKD+2) = IRNG1
-               END IF
-               EXIT
-            END IF
-!
-!   1 2 3 4
-!
-            IF (XVALT(IRNGT(IWRKD+2)) <= XVALT(IRNGT(IWRKD+3))) CYCLE
-!
-!   1 3 x x
-!
-            IF (XVALT(IRNGT(IWRKD+1)) <= XVALT(IRNGT(IWRKD+3))) THEN
-               IRNG2 = IRNGT (IWRKD+2)
-               IRNGT (IWRKD+2) = IRNGT (IWRKD+3)
-               IF (XVALT(IRNG2) <= XVALT(IRNGT(IWRKD+4))) THEN
-!   1 3 2 4
-                  IRNGT (IWRKD+3) = IRNG2
-               ELSE
-!   1 3 4 2
-                  IRNGT (IWRKD+3) = IRNGT (IWRKD+4)
-                  IRNGT (IWRKD+4) = IRNG2
-               END IF
-!
-!   3 x x x
-!
-            ELSE
-               IRNG1 = IRNGT (IWRKD+1)
-               IRNG2 = IRNGT (IWRKD+2)
-               IRNGT (IWRKD+1) = IRNGT (IWRKD+3)
-               IF (XVALT(IRNG1) <= XVALT(IRNGT(IWRKD+4))) THEN
-                  IRNGT (IWRKD+2) = IRNG1
-                  IF (XVALT(IRNG2) <= XVALT(IRNGT(IWRKD+4))) THEN
-!   3 1 2 4
-                     IRNGT (IWRKD+3) = IRNG2
-                  ELSE
-!   3 1 4 2
-                     IRNGT (IWRKD+3) = IRNGT (IWRKD+4)
-                     IRNGT (IWRKD+4) = IRNG2
-                  END IF
-               ELSE
-!   3 4 1 2
-                  IRNGT (IWRKD+2) = IRNGT (IWRKD+4)
-                  IRNGT (IWRKD+3) = IRNG1
-                  IRNGT (IWRKD+4) = IRNG2
-               END IF
-            END IF
-         END DO
-!
-!  The Cs become As and Bs
-!
-         LMTNA = 4
-         EXIT
-      END DO
-!
-!  Iteration loop. Each time, the length of the ordered subsets
-!  is DOubled.
-!
-      DO
-         IF (2*LMTNA >= NVAL) EXIT
-         IWRKF = 0
-         LMTNC = 2 * LMTNC
-!
-!   Loop on merges of A and B into C
-!
-         DO
-            IWRK = IWRKF
-            IWRKD = IWRKF + 1
-            JINDA = IWRKF + LMTNA
-            IWRKF = IWRKF + LMTNC
-            IF (IWRKF >= NVAL) THEN
-               IF (JINDA >= NVAL) EXIT
-               IWRKF = NVAL
-            END IF
-            IINDA = 1
-            IINDB = JINDA + 1
-!
-!  One steps in the C subset, that we create in the final rank array
-!
-!  Make a copy of the rank array for the iteration
-!
-            JWRKT (1:LMTNA) = IRNGT (IWRKD:JINDA)
-            XVALA = XVALT (JWRKT(IINDA))
-            XVALB = XVALT (IRNGT(IINDB))
-!
-            DO
-               IWRK = IWRK + 1
-!
-!  We still have unprocessed values in both A and B
-!
-               IF (XVALA > XVALB) THEN
-                  IRNGT (IWRK) = IRNGT (IINDB)
-                  IINDB = IINDB + 1
-                  IF (IINDB > IWRKF) THEN
-!  Only A still with unprocessed values
-                     IRNGT (IWRK+1:IWRKF) = JWRKT (IINDA:LMTNA)
-                     EXIT
-                  END IF
-                  XVALB = XVALT (IRNGT(IINDB))
-               ELSE
-                  IRNGT (IWRK) = JWRKT (IINDA)
-                  IINDA = IINDA + 1
-                  IF (IINDA > LMTNA) EXIT! Only B still with unprocessed values
-                  XVALA = XVALT (JWRKT(IINDA))
-               END IF
-!
-            END DO
-         END DO
-!
-!  The Cs become As and Bs
-!
-         LMTNA = 2 * LMTNA
-      END DO
-!
-!   Last merge of A and B into C, with removal of duplicates.
-!
-      IINDA = 1
-      IINDB = LMTNA + 1
-      NUNI = 0
-!
-!  One steps in the C subset, that we create in the final rank array
-!
-      JWRKT (1:LMTNA) = IRNGT (1:LMTNA)
-      IF (IINDB <= NVAL) THEN
-        XTST = NEARLESS (Min(XVALT(JWRKT(1)), XVALT(IRNGT(IINDB))))
-      ELSE
-        XTST = NEARLESS (XVALT(JWRKT(1)))
-      ENDIF
-      DO IWRK = 1, NVAL
-!
-!  We still have unprocessed values in both A and B
-!
-         IF (IINDA <= LMTNA) THEN
-            IF (IINDB <= NVAL) THEN
-               IF (XVALT(JWRKT(IINDA)) > XVALT(IRNGT(IINDB))) THEN
-                  IRNG = IRNGT (IINDB)
-                  IINDB = IINDB + 1
-               ELSE
-                  IRNG = JWRKT (IINDA)
-                  IINDA = IINDA + 1
-               END IF
-            ELSE
-!
-!  Only A still with unprocessed values
-!
-               IRNG = JWRKT (IINDA)
-               IINDA = IINDA + 1
-            END IF
-         ELSE
-!
-!  Only B still with unprocessed values
-!
-            IRNG = IRNGT (IWRK)
-         END IF
-         IF (XVALT(IRNG) > XTST) THEN
-            XTST = XVALT (IRNG)
-            NUNI = NUNI + 1
-            IRNGT (NUNI) = IRNG
-         END IF
-!
-      END DO
-!
-      RETURN
-!
-END SUBROUTINE R_unirnk
-SUBROUTINE I_unirnk (XVALT, IRNGT, NUNI)
-! __________________________________________________________
-!   UNIRNK = Merge-sort ranking of an array, with removal of
-!   duplicate entries.
-!   The routine is similar to pure merge-sort ranking, but on
-!   the last pass, it discards indices that correspond to
-!   duplicate entries.
-!   For performance reasons, the first 2 passes are taken
-!   out of the standard loop, and use dedicated coding.
-! __________________________________________________________
-! __________________________________________________________
-      INTEGER, DIMENSION (:), INTENT (In) :: XVALT
-      INTEGER, DIMENSION (:), INTENT (Out) :: IRNGT
-      INTEGER, INTENT (Out) :: NUNI
-! __________________________________________________________
-      INTEGER, DIMENSION (SIZE(IRNGT)) :: JWRKT
-      INTEGER :: LMTNA, LMTNC, IRNG, IRNG1, IRNG2
-      INTEGER :: NVAL, IIND, IWRKD, IWRK, IWRKF, JINDA, IINDA, IINDB
-      INTEGER :: XTST, XVALA, XVALB
-!
-!
-      NVAL = Min (SIZE(XVALT), SIZE(IRNGT))
-      NUNI = NVAL
+  nval = min(size(xvalt), size(irngt))
+  nuni = nval
 
-      SELECT CASE (NVAL)
-      CASE (:0)
-         RETURN
-      CASE (1)
-         IRNGT (1) = 1
-         RETURN
-      CASE DEFAULT
-         CONTINUE
-      END SELECT
-!
-!  Fill-in the index array, creating ordered couples
-!
-      DO IIND = 2, NVAL, 2
-         IF (XVALT(IIND-1) < XVALT(IIND)) THEN
-            IRNGT (IIND-1) = IIND - 1
-            IRNGT (IIND) = IIND
-         ELSE
-            IRNGT (IIND-1) = IIND
-            IRNGT (IIND) = IIND - 1
-         END IF
-      END DO
-      IF (MODULO(NVAL, 2) /= 0) THEN
-         IRNGT (NVAL) = NVAL
-      END IF
-!
-!  We will now have ordered subsets A - B - A - B - ...
-!  and merge A and B couples into     C   -   C   - ...
-!
-      LMTNA = 2
-      LMTNC = 4
-!
-!  First iteration. The length of the ordered subsets goes from 2 to 4
-!
-      DO
-         IF (NVAL <= 4) EXIT
-!
-!   Loop on merges of A and B into C
-!
-         DO IWRKD = 0, NVAL - 1, 4
-            IF ((IWRKD+4) > NVAL) THEN
-               IF ((IWRKD+2) >= NVAL) EXIT
-!
-!   1 2 3
-!
-               IF (XVALT(IRNGT(IWRKD+2)) <= XVALT(IRNGT(IWRKD+3))) EXIT
-!
-!   1 3 2
-!
-               IF (XVALT(IRNGT(IWRKD+1)) <= XVALT(IRNGT(IWRKD+3))) THEN
-                  IRNG2 = IRNGT (IWRKD+2)
-                  IRNGT (IWRKD+2) = IRNGT (IWRKD+3)
-                  IRNGT (IWRKD+3) = IRNG2
-!
-!   3 1 2
-!
-               ELSE
-                  IRNG1 = IRNGT (IWRKD+1)
-                  IRNGT (IWRKD+1) = IRNGT (IWRKD+3)
-                  IRNGT (IWRKD+3) = IRNGT (IWRKD+2)
-                  IRNGT (IWRKD+2) = IRNG1
-               END IF
-               EXIT
-            END IF
-!
-!   1 2 3 4
-!
-            IF (XVALT(IRNGT(IWRKD+2)) <= XVALT(IRNGT(IWRKD+3))) CYCLE
-!
-!   1 3 x x
-!
-            IF (XVALT(IRNGT(IWRKD+1)) <= XVALT(IRNGT(IWRKD+3))) THEN
-               IRNG2 = IRNGT (IWRKD+2)
-               IRNGT (IWRKD+2) = IRNGT (IWRKD+3)
-               IF (XVALT(IRNG2) <= XVALT(IRNGT(IWRKD+4))) THEN
-!   1 3 2 4
-                  IRNGT (IWRKD+3) = IRNG2
-               ELSE
-!   1 3 4 2
-                  IRNGT (IWRKD+3) = IRNGT (IWRKD+4)
-                  IRNGT (IWRKD+4) = IRNG2
-               END IF
-!
-!   3 x x x
-!
-            ELSE
-               IRNG1 = IRNGT (IWRKD+1)
-               IRNG2 = IRNGT (IWRKD+2)
-               IRNGT (IWRKD+1) = IRNGT (IWRKD+3)
-               IF (XVALT(IRNG1) <= XVALT(IRNGT(IWRKD+4))) THEN
-                  IRNGT (IWRKD+2) = IRNG1
-                  IF (XVALT(IRNG2) <= XVALT(IRNGT(IWRKD+4))) THEN
-!   3 1 2 4
-                     IRNGT (IWRKD+3) = IRNG2
-                  ELSE
-!   3 1 4 2
-                     IRNGT (IWRKD+3) = IRNGT (IWRKD+4)
-                     IRNGT (IWRKD+4) = IRNG2
-                  END IF
-               ELSE
-!   3 4 1 2
-                  IRNGT (IWRKD+2) = IRNGT (IWRKD+4)
-                  IRNGT (IWRKD+3) = IRNG1
-                  IRNGT (IWRKD+4) = IRNG2
-               END IF
-            END IF
-         END DO
-!
-!  The Cs become As and Bs
-!
-         LMTNA = 4
-         EXIT
-      END DO
-!
-!  Iteration loop. Each time, the length of the ordered subsets
-!  is DOubled.
-!
-      DO
-         IF (2*LMTNA >= NVAL) EXIT
-         IWRKF = 0
-         LMTNC = 2 * LMTNC
-!
-!   Loop on merges of A and B into C
-!
-         DO
-            IWRK = IWRKF
-            IWRKD = IWRKF + 1
-            JINDA = IWRKF + LMTNA
-            IWRKF = IWRKF + LMTNC
-            IF (IWRKF >= NVAL) THEN
-               IF (JINDA >= NVAL) EXIT
-               IWRKF = NVAL
-            END IF
-            IINDA = 1
-            IINDB = JINDA + 1
-!
-!  One steps in the C subset, that we create in the final rank array
-!
-!  Make a copy of the rank array for the iteration
-!
-            JWRKT (1:LMTNA) = IRNGT (IWRKD:JINDA)
-            XVALA = XVALT (JWRKT(IINDA))
-            XVALB = XVALT (IRNGT(IINDB))
-!
-            DO
-               IWRK = IWRK + 1
-!
-!  We still have unprocessed values in both A and B
-!
-               IF (XVALA > XVALB) THEN
-                  IRNGT (IWRK) = IRNGT (IINDB)
-                  IINDB = IINDB + 1
-                  IF (IINDB > IWRKF) THEN
-!  Only A still with unprocessed values
-                     IRNGT (IWRK+1:IWRKF) = JWRKT (IINDA:LMTNA)
-                     EXIT
-                  END IF
-                  XVALB = XVALT (IRNGT(IINDB))
-               ELSE
-                  IRNGT (IWRK) = JWRKT (IINDA)
-                  IINDA = IINDA + 1
-                  IF (IINDA > LMTNA) EXIT! Only B still with unprocessed values
-                  XVALA = XVALT (JWRKT(IINDA))
-               END IF
-!
-            END DO
-         END DO
-!
-!  The Cs become As and Bs
-!
-         LMTNA = 2 * LMTNA
-      END DO
-!
-!   Last merge of A and B into C, with removal of duplicates.
-!
-      IINDA = 1
-      IINDB = LMTNA + 1
-      NUNI = 0
-!
-!  One steps in the C subset, that we create in the final rank array
-!
-      JWRKT (1:LMTNA) = IRNGT (1:LMTNA)
-      IF (IINDB <= NVAL) THEN
-        XTST = NEARLESS (Min(XVALT(JWRKT(1)), XVALT(IRNGT(IINDB))))
-      ELSE
-        XTST = NEARLESS (XVALT(JWRKT(1)))
-      ENDIF
-      DO IWRK = 1, NVAL
-!
-!  We still have unprocessed values in both A and B
-!
-         IF (IINDA <= LMTNA) THEN
-            IF (IINDB <= NVAL) THEN
-               IF (XVALT(JWRKT(IINDA)) > XVALT(IRNGT(IINDB))) THEN
-                  IRNG = IRNGT (IINDB)
-                  IINDB = IINDB + 1
-               ELSE
-                  IRNG = JWRKT (IINDA)
-                  IINDA = IINDA + 1
-               END IF
-            ELSE
-!
-!  Only A still with unprocessed values
-!
-               IRNG = JWRKT (IINDA)
-               IINDA = IINDA + 1
-            END IF
-         ELSE
-!
-!  Only B still with unprocessed values
-!
-            IRNG = IRNGT (IWRK)
-         END IF
-         IF (XVALT(IRNG) > XTST) THEN
-            XTST = XVALT (IRNG)
-            NUNI = NUNI + 1
-            IRNGT (NUNI) = IRNG
-         END IF
-!
-      END DO
-!
-      RETURN
-!
-END SUBROUTINE I_unirnk
+  select case (nval)
+  case (:0)
+    return
+  case (1)
+    irngt(1) = 1
+    return
+  end select
 
-FUNCTION D_nearless (XVAL) RESULT (D_nl)
-!  Nearest value less than given value
-! __________________________________________________________
-      REAL (KIND=8), INTENT (In) :: XVAL
-      REAL (KIND=8) :: D_nl
-! __________________________________________________________
-      D_nl = nearest (XVAL, -1.0_kdp)
-      RETURN
-!
-END FUNCTION D_nearless
-FUNCTION R_nearless (XVAL) RESULT (R_nl)
-!  Nearest value less than given value
-! __________________________________________________________
-      REAL(KIND=4), INTENT (In) :: XVAL
-      REAL(KIND=4) :: R_nl
-! __________________________________________________________
-      R_nl = nearest (XVAL, -1.0)
-      RETURN
-!
-END FUNCTION R_nearless
-FUNCTION I_nearless (XVAL) RESULT (I_nl)
-!  Nearest value less than given value
-! __________________________________________________________
-      INTEGER, INTENT (In) :: XVAL
-      INTEGER :: I_nl
-! __________________________________________________________
-      I_nl = XVAL - 1
-      RETURN
-!
-END FUNCTION I_nearless
+  ! Fill-in the index array, creating ordered couples
+  do iind = 2, nval, 2
+    if (xvalt(iind-1) < xvalt(iind)) then
+      irngt(iind-1) = iind - 1
+      irngt(iind) = iind
+    else
+      irngt(iind-1) = iind
+      irngt(iind) = iind - 1
+    end if
+  end do
+  
+  if (modulo(nval, 2) /= 0) then
+    irngt(nval) = nval
+  end if
 
-END MODULE mo_unirnk
+  lmtna = 2
+  lmtnc = 4
+
+  ! First iteration: ordered subset length goes from 2 to 4
+  do
+    if (nval <= 4) exit
+
+    do iwrkd = 0, nval - 1, 4
+      if ((iwrkd+4) > nval) then
+        if ((iwrkd+2) >= nval) exit
+        if (xvalt(irngt(iwrkd+2)) <= xvalt(irngt(iwrkd+3))) exit
+
+        if (xvalt(irngt(iwrkd+1)) <= xvalt(irngt(iwrkd+3))) then
+          irng2 = irngt(iwrkd+2)
+          irngt(iwrkd+2) = irngt(iwrkd+3)
+          irngt(iwrkd+3) = irng2
+        else
+          irng1 = irngt(iwrkd+1)
+          irngt(iwrkd+1) = irngt(iwrkd+3)
+          irngt(iwrkd+3) = irngt(iwrkd+2)
+          irngt(iwrkd+2) = irng1
+        end if
+        exit
+      end if
+
+      if (xvalt(irngt(iwrkd+2)) <= xvalt(irngt(iwrkd+3))) cycle
+
+      if (xvalt(irngt(iwrkd+1)) <= xvalt(irngt(iwrkd+3))) then
+        irng2 = irngt(iwrkd+2)
+        irngt(iwrkd+2) = irngt(iwrkd+3)
+        if (xvalt(irng2) <= xvalt(irngt(iwrkd+4))) then
+          irngt(iwrkd+3) = irng2
+        else
+          irngt(iwrkd+3) = irngt(iwrkd+4)
+          irngt(iwrkd+4) = irng2
+        end if
+      else
+        irng1 = irngt(iwrkd+1)
+        irng2 = irngt(iwrkd+2)
+        irngt(iwrkd+1) = irngt(iwrkd+3)
+        if (xvalt(irng1) <= xvalt(irngt(iwrkd+4))) then
+          irngt(iwrkd+2) = irng1
+          if (xvalt(irng2) <= xvalt(irngt(iwrkd+4))) then
+            irngt(iwrkd+3) = irng2
+          else
+            irngt(iwrkd+3) = irngt(iwrkd+4)
+            irngt(iwrkd+4) = irng2
+          end if
+        else
+          irngt(iwrkd+2) = irngt(iwrkd+4)
+          irngt(iwrkd+3) = irng1
+          irngt(iwrkd+4) = irng2
+        end if
+      end if
+    end do
+
+    lmtna = 4
+    exit
+  end do
+
+  ! Main iteration loop: double the length of ordered subsets each time
+  do
+    if (2*lmtna >= nval) exit
+    iwrkf = 0
+    lmtnc = 2 * lmtnc
+
+    do
+      iwrk = iwrkf
+      iwrkd = iwrkf + 1
+      jinda = iwrkf + lmtna
+      iwrkf = iwrkf + lmtnc
+      if (iwrkf >= nval) then
+        if (jinda >= nval) exit
+        iwrkf = nval
+      end if
+      iinda = 1
+      iindb = jinda + 1
+
+      jwrkt(1:lmtna) = irngt(iwrkd:jinda)
+      xvala = xvalt(jwrkt(iinda))
+      xvalb = xvalt(irngt(iindb))
+
+      do
+        iwrk = iwrk + 1
+
+        if (xvala > xvalb) then
+          irngt(iwrk) = irngt(iindb)
+          iindb = iindb + 1
+          if (iindb > iwrkf) then
+            irngt(iwrk+1:iwrkf) = jwrkt(iinda:lmtna)
+            exit
+          end if
+          xvalb = xvalt(irngt(iindb))
+        else
+          irngt(iwrk) = jwrkt(iinda)
+          iinda = iinda + 1
+          if (iinda > lmtna) exit
+          xvala = xvalt(jwrkt(iinda))
+        end if
+      end do
+    end do
+
+    lmtna = 2 * lmtna
+  end do
+
+  ! Last merge with removal of duplicates
+  iinda = 1
+  iindb = lmtna + 1
+  nuni = 0
+
+  jwrkt(1:lmtna) = irngt(1:lmtna)
+  if (iindb <= nval) then
+    xtst = nearless(min(xvalt(jwrkt(1)), xvalt(irngt(iindb))))
+  else
+    xtst = nearless(xvalt(jwrkt(1)))
+  end if
+  
+  do iwrk = 1, nval
+    if (iinda <= lmtna) then
+      if (iindb <= nval) then
+        if (xvalt(jwrkt(iinda)) > xvalt(irngt(iindb))) then
+          irng = irngt(iindb)
+          iindb = iindb + 1
+        else
+          irng = jwrkt(iinda)
+          iinda = iinda + 1
+        end if
+      else
+        irng = jwrkt(iinda)
+        iinda = iinda + 1
+      end if
+    else
+      irng = irngt(iwrk)
+    end if
+    
+    if (xvalt(irng) > xtst) then
+      xtst = xvalt(irng)
+      nuni = nuni + 1
+      irngt(nuni) = irng
+    end if
+  end do
+
+end subroutine d_unirnk
+
+subroutine r_unirnk(xvalt, irngt, nuni)
+  ! Merge-sort ranking for single precision arrays with duplicate removal
+  
+  real(kind=4), dimension(:), intent(in) :: xvalt
+  integer, dimension(:), intent(out) :: irngt
+  integer, intent(out) :: nuni
+  
+  integer, dimension(size(irngt)) :: jwrkt
+  integer :: lmtna, lmtnc, irng, irng1, irng2
+  integer :: nval, iind, iwrkd, iwrk, iwrkf, jinda, iinda, iindb
+  real(kind=4) :: xtst, xvala, xvalb
+
+  nval = min(size(xvalt), size(irngt))
+  nuni = nval
+
+  select case (nval)
+  case (:0)
+    return
+  case (1)
+    irngt(1) = 1
+    return
+  end select
+
+  do iind = 2, nval, 2
+    if (xvalt(iind-1) < xvalt(iind)) then
+      irngt(iind-1) = iind - 1
+      irngt(iind) = iind
+    else
+      irngt(iind-1) = iind
+      irngt(iind) = iind - 1
+    end if
+  end do
+  
+  if (modulo(nval, 2) /= 0) then
+    irngt(nval) = nval
+  end if
+
+  lmtna = 2
+  lmtnc = 4
+
+  do
+    if (nval <= 4) exit
+
+    do iwrkd = 0, nval - 1, 4
+      if ((iwrkd+4) > nval) then
+        if ((iwrkd+2) >= nval) exit
+        if (xvalt(irngt(iwrkd+2)) <= xvalt(irngt(iwrkd+3))) exit
+
+        if (xvalt(irngt(iwrkd+1)) <= xvalt(irngt(iwrkd+3))) then
+          irng2 = irngt(iwrkd+2)
+          irngt(iwrkd+2) = irngt(iwrkd+3)
+          irngt(iwrkd+3) = irng2
+        else
+          irng1 = irngt(iwrkd+1)
+          irngt(iwrkd+1) = irngt(iwrkd+3)
+          irngt(iwrkd+3) = irngt(iwrkd+2)
+          irngt(iwrkd+2) = irng1
+        end if
+        exit
+      end if
+
+      if (xvalt(irngt(iwrkd+2)) <= xvalt(irngt(iwrkd+3))) cycle
+
+      if (xvalt(irngt(iwrkd+1)) <= xvalt(irngt(iwrkd+3))) then
+        irng2 = irngt(iwrkd+2)
+        irngt(iwrkd+2) = irngt(iwrkd+3)
+        if (xvalt(irng2) <= xvalt(irngt(iwrkd+4))) then
+          irngt(iwrkd+3) = irng2
+        else
+          irngt(iwrkd+3) = irngt(iwrkd+4)
+          irngt(iwrkd+4) = irng2
+        end if
+      else
+        irng1 = irngt(iwrkd+1)
+        irng2 = irngt(iwrkd+2)
+        irngt(iwrkd+1) = irngt(iwrkd+3)
+        if (xvalt(irng1) <= xvalt(irngt(iwrkd+4))) then
+          irngt(iwrkd+2) = irng1
+          if (xvalt(irng2) <= xvalt(irngt(iwrkd+4))) then
+            irngt(iwrkd+3) = irng2
+          else
+            irngt(iwrkd+3) = irngt(iwrkd+4)
+            irngt(iwrkd+4) = irng2
+          end if
+        else
+          irngt(iwrkd+2) = irngt(iwrkd+4)
+          irngt(iwrkd+3) = irng1
+          irngt(iwrkd+4) = irng2
+        end if
+      end if
+    end do
+
+    lmtna = 4
+    exit
+  end do
+
+  do
+    if (2*lmtna >= nval) exit
+    iwrkf = 0
+    lmtnc = 2 * lmtnc
+
+    do
+      iwrk = iwrkf
+      iwrkd = iwrkf + 1
+      jinda = iwrkf + lmtna
+      iwrkf = iwrkf + lmtnc
+      if (iwrkf >= nval) then
+        if (jinda >= nval) exit
+        iwrkf = nval
+      end if
+      iinda = 1
+      iindb = jinda + 1
+
+      jwrkt(1:lmtna) = irngt(iwrkd:jinda)
+      xvala = xvalt(jwrkt(iinda))
+      xvalb = xvalt(irngt(iindb))
+
+      do
+        iwrk = iwrk + 1
+
+        if (xvala > xvalb) then
+          irngt(iwrk) = irngt(iindb)
+          iindb = iindb + 1
+          if (iindb > iwrkf) then
+            irngt(iwrk+1:iwrkf) = jwrkt(iinda:lmtna)
+            exit
+          end if
+          xvalb = xvalt(irngt(iindb))
+        else
+          irngt(iwrk) = jwrkt(iinda)
+          iinda = iinda + 1
+          if (iinda > lmtna) exit
+          xvala = xvalt(jwrkt(iinda))
+        end if
+      end do
+    end do
+
+    lmtna = 2 * lmtna
+  end do
+
+  iinda = 1
+  iindb = lmtna + 1
+  nuni = 0
+
+  jwrkt(1:lmtna) = irngt(1:lmtna)
+  if (iindb <= nval) then
+    xtst = nearless(min(xvalt(jwrkt(1)), xvalt(irngt(iindb))))
+  else
+    xtst = nearless(xvalt(jwrkt(1)))
+  end if
+  
+  do iwrk = 1, nval
+    if (iinda <= lmtna) then
+      if (iindb <= nval) then
+        if (xvalt(jwrkt(iinda)) > xvalt(irngt(iindb))) then
+          irng = irngt(iindb)
+          iindb = iindb + 1
+        else
+          irng = jwrkt(iinda)
+          iinda = iinda + 1
+        end if
+      else
+        irng = jwrkt(iinda)
+        iinda = iinda + 1
+      end if
+    else
+      irng = irngt(iwrk)
+    end if
+    
+    if (xvalt(irng) > xtst) then
+      xtst = xvalt(irng)
+      nuni = nuni + 1
+      irngt(nuni) = irng
+    end if
+  end do
+
+end subroutine r_unirnk
+
+subroutine i_unirnk(xvalt, irngt, nuni)
+  ! Merge-sort ranking for integer arrays with duplicate removal
+  
+  integer, dimension(:), intent(in) :: xvalt
+  integer, dimension(:), intent(out) :: irngt
+  integer, intent(out) :: nuni
+  
+  integer, dimension(size(irngt)) :: jwrkt
+  integer :: lmtna, lmtnc, irng, irng1, irng2
+  integer :: nval, iind, iwrkd, iwrk, iwrkf, jinda, iinda, iindb
+  integer :: xtst, xvala, xvalb
+
+  nval = min(size(xvalt), size(irngt))
+  nuni = nval
+
+  select case (nval)
+  case (:0)
+    return
+  case (1)
+    irngt(1) = 1
+    return
+  end select
+
+  do iind = 2, nval, 2
+    if (xvalt(iind-1) < xvalt(iind)) then
+      irngt(iind-1) = iind - 1
+      irngt(iind) = iind
+    else
+      irngt(iind-1) = iind
+      irngt(iind) = iind - 1
+    end if
+  end do
+  
+  if (modulo(nval, 2) /= 0) then
+    irngt(nval) = nval
+  end if
+
+  lmtna = 2
+  lmtnc = 4
+
+  do
+    if (nval <= 4) exit
+
+    do iwrkd = 0, nval - 1, 4
+      if ((iwrkd+4) > nval) then
+        if ((iwrkd+2) >= nval) exit
+        if (xvalt(irngt(iwrkd+2)) <= xvalt(irngt(iwrkd+3))) exit
+
+        if (xvalt(irngt(iwrkd+1)) <= xvalt(irngt(iwrkd+3))) then
+          irng2 = irngt(iwrkd+2)
+          irngt(iwrkd+2) = irngt(iwrkd+3)
+          irngt(iwrkd+3) = irng2
+        else
+          irng1 = irngt(iwrkd+1)
+          irngt(iwrkd+1) = irngt(iwrkd+3)
+          irngt(iwrkd+3) = irngt(iwrkd+2)
+          irngt(iwrkd+2) = irng1
+        end if
+        exit
+      end if
+
+      if (xvalt(irngt(iwrkd+2)) <= xvalt(irngt(iwrkd+3))) cycle
+
+      if (xvalt(irngt(iwrkd+1)) <= xvalt(irngt(iwrkd+3))) then
+        irng2 = irngt(iwrkd+2)
+        irngt(iwrkd+2) = irngt(iwrkd+3)
+        if (xvalt(irng2) <= xvalt(irngt(iwrkd+4))) then
+          irngt(iwrkd+3) = irng2
+        else
+          irngt(iwrkd+3) = irngt(iwrkd+4)
+          irngt(iwrkd+4) = irng2
+        end if
+      else
+        irng1 = irngt(iwrkd+1)
+        irng2 = irngt(iwrkd+2)
+        irngt(iwrkd+1) = irngt(iwrkd+3)
+        if (xvalt(irng1) <= xvalt(irngt(iwrkd+4))) then
+          irngt(iwrkd+2) = irng1
+          if (xvalt(irng2) <= xvalt(irngt(iwrkd+4))) then
+            irngt(iwrkd+3) = irng2
+          else
+            irngt(iwrkd+3) = irngt(iwrkd+4)
+            irngt(iwrkd+4) = irng2
+          end if
+        else
+          irngt(iwrkd+2) = irngt(iwrkd+4)
+          irngt(iwrkd+3) = irng1
+          irngt(iwrkd+4) = irng2
+        end if
+      end if
+    end do
+
+    lmtna = 4
+    exit
+  end do
+
+  do
+    if (2*lmtna >= nval) exit
+    iwrkf = 0
+    lmtnc = 2 * lmtnc
+
+    do
+      iwrk = iwrkf
+      iwrkd = iwrkf + 1
+      jinda = iwrkf + lmtna
+      iwrkf = iwrkf + lmtnc
+      if (iwrkf >= nval) then
+        if (jinda >= nval) exit
+        iwrkf = nval
+      end if
+      iinda = 1
+      iindb = jinda + 1
+
+      jwrkt(1:lmtna) = irngt(iwrkd:jinda)
+      xvala = xvalt(jwrkt(iinda))
+      xvalb = xvalt(irngt(iindb))
+
+      do
+        iwrk = iwrk + 1
+
+        if (xvala > xvalb) then
+          irngt(iwrk) = irngt(iindb)
+          iindb = iindb + 1
+          if (iindb > iwrkf) then
+            irngt(iwrk+1:iwrkf) = jwrkt(iinda:lmtna)
+            exit
+          end if
+          xvalb = xvalt(irngt(iindb))
+        else
+          irngt(iwrk) = jwrkt(iinda)
+          iinda = iinda + 1
+          if (iinda > lmtna) exit
+          xvala = xvalt(jwrkt(iinda))
+        end if
+      end do
+    end do
+
+    lmtna = 2 * lmtna
+  end do
+
+  iinda = 1
+  iindb = lmtna + 1
+  nuni = 0
+
+  jwrkt(1:lmtna) = irngt(1:lmtna)
+  if (iindb <= nval) then
+    xtst = nearless(min(xvalt(jwrkt(1)), xvalt(irngt(iindb))))
+  else
+    xtst = nearless(xvalt(jwrkt(1)))
+  end if
+  
+  do iwrk = 1, nval
+    if (iinda <= lmtna) then
+      if (iindb <= nval) then
+        if (xvalt(jwrkt(iinda)) > xvalt(irngt(iindb))) then
+          irng = irngt(iindb)
+          iindb = iindb + 1
+        else
+          irng = jwrkt(iinda)
+          iinda = iinda + 1
+        end if
+      else
+        irng = jwrkt(iinda)
+        iinda = iinda + 1
+      end if
+    else
+      irng = irngt(iwrk)
+    end if
+    
+    if (xvalt(irng) > xtst) then
+      xtst = xvalt(irng)
+      nuni = nuni + 1
+      irngt(nuni) = irng
+    end if
+  end do
+
+end subroutine i_unirnk
+
+function d_nearless(xval) result(d_nl)
+  ! Return nearest value less than given double precision value
+  real(kind=8), intent(in) :: xval
+  real(kind=8) :: d_nl
+  
+  d_nl = nearest(xval, -1.0_kdp)
+  
+end function d_nearless
+
+function r_nearless(xval) result(r_nl)
+  ! Return nearest value less than given single precision value
+  real(kind=4), intent(in) :: xval
+  real(kind=4) :: r_nl
+  
+  r_nl = nearest(xval, -1.0)
+  
+end function r_nearless
+
+function i_nearless(xval) result(i_nl)
+  ! Return nearest value less than given integer value
+  integer, intent(in) :: xval
+  integer :: i_nl
+  
+  i_nl = xval - 1
+  
+end function i_nearless
+
+end module mo_unirnk

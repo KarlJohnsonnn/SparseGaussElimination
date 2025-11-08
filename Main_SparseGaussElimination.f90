@@ -1,133 +1,113 @@
-!===================================================================================
-! This is a test program for the solution of a sparse linear equation system
+!===============================================================================
+! Program: Main_SparseGaussElimination
+!
+! Purpose: Test program for the solution of a sparse linear equation system
+!
+! Description:
+!   Solves Ax = b where A is a sparse matrix using LU decomposition with
+!   Markowitz ordering for optimal fill-in reduction during factorization.
 !
 ! Author: Willi Schimmel
-! Institut: Leibniz Institute for tropospheric research (TROPOS) 
-! Date: 7.June 2018
-!===================================================================================
+! Institute: Leibniz Institute for Tropospheric Research (TROPOS)
+! Date: 7 June 2018
+!===============================================================================
+program main_sparse_gauss_elimination
 
-PROGRAM Main_SparseGaussElimmination
-  !
-  USE Kind_Mod
-  USE Sparse_Mod
+  use kind_mod
+  use sparse_mod
 
-  IMPLICIT NONE
-  !
-  CHARACTER(80)   :: Filename0 = ''        ! *.run file
-  CHARACTER(80)   :: input = ''        ! *.run file
-
-
-  ! matricies for symbolic phase
-  TYPE(CSR_Matrix_T)     :: Miter, LU_Miter  ! compressed row
-  TYPE(SpRowColD_T)      :: temp_LU_Dec           ! sparse-LU matrix format
-  REAL(dp), ALLOCATABLE  :: rhs(:)
-
-  INTEGER,  ALLOCATABLE  :: LU_Perm(:)
-
-  ! permutation vector/ pivot order for LU-decomp
-  INTEGER, ALLOCATABLE :: PivOrder(:)
-
+  implicit none
+  
+  character(len=80) :: filename0 = ''
+  character(len=80) :: input = ''
+  character(len=400) :: io_msg
+  integer :: io_stat
+  integer :: i
+  
+  ! Matrices for symbolic phase
+  type(csr_matrix_t) :: miter, lu_miter
+  type(sprowcold_t) :: temp_lu_dec
+  real(dp), allocatable :: rhs(:)
+  integer, allocatable :: lu_perm(:)
+  integer, allocatable :: piv_order(:)
+  
   ! Timer variables
-  REAL(dp) :: StartTimer, TimeSymbolic, TimeNumeric, TimeSolve
-
-  INTEGER :: i
-
-  CHARACTER(400) :: io_msg
-  INTEGER        :: io_stat
-
-
-  !----------------------------------------------------------------
-  ! --- Read run control parameters (which runfile)
-  CALL getarg( 1 , FileName0 )             
-  IF ( FileName0 == '' ) THEN
-    WRITE(*,777,ADVANCE='NO') 'Input RUNFilename: '
-    READ(*,*,IOSTAT=io_stat,IOMSG=io_msg)   FileName0
-  END IF
-  FileName0 = TRIM(ADJUSTL(FileName0))
+  real(dp) :: start_timer, time_symbolic, time_numeric, time_solve
   
-  Miter = ReadSparseMatrix(FileName0)
+  character(len=*), parameter :: fmt_output = '(10X,A)'
 
-  CALL CPU_TIME(StartTimer)
-  !----------------------------------------------------------------
-  ! --- convert to Sparse RowColumn format for factorisation
-  temp_LU_Dec = CSR_to_SpRowColD(Miter) 
-
-  !----------------------------------------------------------------
-  ! --- symbolic factorization
-
-  WRITE(*,*); WRITE(*,777) 'Ordering options, type:'; WRITE(*,*)
-  WRITE(*,777) '      marko     ==> Markowitz ordering heuristic (minimum-degree)'
-  WRITE(*,777) '      given     ==> pivot order is provided by an integer array'
-  WRITE(*,777) '      inorder   ==> pivot order is not altered'
-  WRITE(*,*)
-  WRITE(*,777,ADVANCE='NO') 'Choose ordering :: '
-  READ(*,*,IOSTAT=io_stat,IOMSG=io_msg) input
-
-  IF ( TRIM(input) == 'marko' ) THEN
-
-    CALL SymbLU_SpRowColD_M( temp_LU_Dec )
+  ! Read matrix filename from command line or prompt user
+  call getarg(1, filename0)
+  if (filename0 == '') then
+    write(*,fmt_output,advance='no') 'Input matrix filename: '
+    read(*,*,iostat=io_stat,iomsg=io_msg) filename0
+  end if
+  filename0 = trim(adjustl(filename0))
   
-  ELSE IF ( TRIM(input) == 'given' ) THEN
-    
-    WRITE(*,777,ADVANCE='NO') 'Select File :: '
-    READ(*,*,IOSTAT=io_stat,IOMSG=io_msg) input
+  miter = read_sparse_matrix(filename0)
 
-    PivOrder = InputPivotOrder(input,temp_LU_Dec%m)
-    CALL SymbLU_SpRowColD( temp_LU_Dec , PivOrder )
+  call cpu_time(start_timer)
   
-  ELSE IF ( TRIM(input) == 'inorder' ) THEN
+  ! Convert to sparse row-column format for factorization
+  temp_lu_dec = csr_to_sprowcold(miter)
 
-    PivOrder = [(i , i = 1 , temp_LU_Dec%m )]
-    CALL SymbLU_SpRowColD( temp_LU_Dec , PivOrder )
+  ! Symbolic factorization - choose ordering method
+  write(*,*)
+  write(*,fmt_output) 'Ordering options, type:'
+  write(*,*)
+  write(*,fmt_output) '      marko     ==> Markowitz ordering heuristic (minimum-degree)'
+  write(*,fmt_output) '      given     ==> pivot order is provided by an integer array'
+  write(*,fmt_output) '      inorder   ==> pivot order is not altered'
+  write(*,*)
+  write(*,fmt_output,advance='no') 'Choose ordering :: '
+  read(*,*,iostat=io_stat,iomsg=io_msg) input
 
-  ELSE
-
-    WRITE(*,777) 'Wrong input --> STOP!'
-    STOP
-
-  END IF
-
-  !----------------------------------------------------------------
-  ! --- converting back to csr format
-  LU_Miter = RowColD_to_CSR( temp_LU_Dec )
-
-  !----------------------------------------------------------------
-  ! --- Get the permutation vector LU_Perm and map values of Miter to the permuted LU matrix
-  CALL Get_LU_Permutaion( LU_Perm , LU_Miter , Miter )
-  !----------------------------------------------------------------
-  CALL CPU_TIME(TimeSymbolic)
+  if (trim(input) == 'marko') then
+    call symblu_sprowcold_m(temp_lu_dec)
   
-  WRITE(*,*)
-  WRITE(*,'(10X,A,1X,F12.8,A)') 'Time symbolic factorization = ', TimeSymbolic - StartTimer, ' [sec]'
-
-
-  !----------------------------------------------------------------
-  ! --- Update values in matrix
-  !LU_Miter%Val = 0.0_dp
-  !LU_Miter%Val( LU_Perm ) = A%Val
-
-  ALLOCATE(rhs(LU_Miter%m))
-  CALL RANDOM_NUMBER( LU_Miter%Val )
-  CALL RANDOM_NUMBER( rhs )
-
-  !----------------------------------------------------------------
-  ! --- Numerical factorization
-  CALL CPU_TIME(StartTimer) 
-  CALL SparseLU( LU_Miter )
-  CALL CPU_TIME(TimeNumeric)
-  WRITE(*,'(10X,A,1X,F12.8,A)') 'Time numeric factorization = ', TimeNumeric-StartTimer, ' [sec]'
-
-  !----------------------------------------------------------------
-  ! --- Solving the triangular systems
-  CALL CPU_TIME(StartTimer) 
-  CALL SolveSparse( LU_Miter , rhs )
-  CALL CPU_TIME(TimeSolve)
-  WRITE(*,'(10X,A,1X,F12.8,A)') 'Time solving triangula systems = ', TimeSolve-StartTimer, ' [sec]'
+  else if (trim(input) == 'given') then
+    write(*,fmt_output,advance='no') 'Select file :: '
+    read(*,*,iostat=io_stat,iomsg=io_msg) input
+    piv_order = input_pivot_order(input, temp_lu_dec%m)
+    call symblu_sprowcold(temp_lu_dec, piv_order)
   
+  else if (trim(input) == 'inorder') then
+    piv_order = [(i, i = 1, temp_lu_dec%m)]
+    call symblu_sprowcold(temp_lu_dec, piv_order)
+  
+  else
+    write(*,fmt_output) 'Wrong input --> STOP!'
+    stop
+  end if
 
-  !================================================================
-  !==  FORMAT Statements
-  !================================================================
-  !
-  777  FORMAT(10X,A)
-END PROGRAM Main_SparseGaussElimmination
+  ! Convert back to CSR format
+  lu_miter = rowcold_to_csr(temp_lu_dec)
+
+  ! Get the permutation vector and map values of miter to the permuted LU matrix
+  call get_lu_permutation(lu_perm, lu_miter, miter)
+  
+  call cpu_time(time_symbolic)
+  write(*,*)
+  write(*,'(10X,A,1X,F12.8,A)') 'Time symbolic factorization = ', &
+                                 time_symbolic - start_timer, ' [sec]'
+
+  ! Generate random test data
+  allocate(rhs(lu_miter%m))
+  call random_number(lu_miter%val)
+  call random_number(rhs)
+
+  ! Numerical factorization
+  call cpu_time(start_timer)
+  call sparse_lu(lu_miter)
+  call cpu_time(time_numeric)
+  write(*,'(10X,A,1X,F12.8,A)') 'Time numeric factorization  = ', &
+                                 time_numeric - start_timer, ' [sec]'
+
+  ! Solve the triangular systems
+  call cpu_time(start_timer)
+  call solve_sparse(lu_miter, rhs)
+  call cpu_time(time_solve)
+  write(*,'(10X,A,1X,F12.8,A)') 'Time solving triangular sys = ', &
+                                 time_solve - start_timer, ' [sec]'
+
+end program main_sparse_gauss_elimination

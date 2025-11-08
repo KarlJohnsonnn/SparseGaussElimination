@@ -1,10 +1,16 @@
-MODULE Kind_Mod
+!===============================================================================
+! Module: kind_mod
+! 
+! Purpose: Define precision parameters for floating-point arithmetic
+!
+! Author: Willi Schimmel
+! Institute: Leibniz Institute for Tropospheric Research (TROPOS)
+!===============================================================================
+module kind_mod
 
-  IMPLICIT NONE
+  implicit none
   
-  !INCLUDE 'dmumps_struc.h'
-  
- INTEGER, PARAMETER :: dp = 8 !double pressicion
- !TYPE(DMUMPS_STRUC) :: Mumps_Par
+  ! Double precision kind parameter
+  integer, parameter :: dp = selected_real_kind(15, 307)
 
-END MODULE Kind_Mod
+end module kind_mod

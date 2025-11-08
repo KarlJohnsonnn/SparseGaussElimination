@@ -1,2 +1,30 @@
-fort.*
+# Compiled object files
+*.o
+*.mod
+*.smod
+
+# Executables
 *.exe
+*.out
+
+# Fortran temporary files
+fort.*
+
+# Build artifacts
+*.a
+*.so
+*.dylib
+
+# Editor backup files
+*~
+*.swp
+*.swo
+.*.sw?
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
